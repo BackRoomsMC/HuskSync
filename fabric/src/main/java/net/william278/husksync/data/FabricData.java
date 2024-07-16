@@ -48,6 +48,7 @@ import net.william278.desertwell.util.ThrowingConsumer;
 import net.william278.husksync.FabricHuskSync;
 import net.william278.husksync.HuskSync;
 import net.william278.husksync.adapter.Adaptable;
+import net.william278.husksync.mixins.StatusEffectInstanceAccessor;
 import net.william278.husksync.user.FabricUser;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -240,17 +241,7 @@ public abstract class FabricData implements Data {
         @NotNull
         public static FabricData.PotionEffects adapt(@NotNull Collection<Effect> effects) {
             return from(effects.stream()
-                    .map(effect -> {
-                        final StatusEffect type = matchEffectType(effect.type());
-                        return type != null ? new StatusEffectInstance(
-                                RegistryEntry.of(type),
-                                effect.duration(),
-                                effect.amplifier(),
-                                effect.isAmbient(),
-                                effect.showParticles(),
-                                effect.hasIcon()
-                        ) : null;
-                    })
+                    .map(FabricData.PotionEffects::adapt)
                     .filter(Objects::nonNull)
                     .toList()
             );
@@ -265,7 +256,7 @@ public abstract class FabricData implements Data {
         @Override
         public void apply(@NotNull FabricUser user, @NotNull FabricHuskSync plugin) throws IllegalStateException {
             final ServerPlayerEntity player = user.getPlayer();
-            player.getActiveStatusEffects().forEach((effect, instance) -> player.removeStatusEffect(effect));
+            player.clearStatusEffects();
             getEffects().forEach(player::addStatusEffect);
         }
 
@@ -273,19 +264,43 @@ public abstract class FabricData implements Data {
         @Override
         public List<Effect> getActiveEffects() {
             return effects.stream()
-                    .map(potionEffect -> {
-                        final String key = getEffectId(potionEffect.getEffectType().value());
-                        return key != null ? new Effect(
+                    .map(FabricData.PotionEffects::adapt)
+                    .filter(Objects::nonNull)
+                    .toList();
+        }
+
+        private static Effect adapt(StatusEffectInstance potionEffect) {
+            if (potionEffect == null)
+                return null;
+            final String key = getEffectId(potionEffect.getEffectType().value());
+            if (key == null)
+                return null;
+            return new Effect(
                                 key,
                                 potionEffect.getAmplifier(),
                                 potionEffect.getDuration(),
                                 potionEffect.isAmbient(),
                                 potionEffect.shouldShowParticles(),
-                                potionEffect.shouldShowIcon()
-                        ) : null;
-                    })
-                    .filter(Objects::nonNull)
-                    .toList();
+                                potionEffect.shouldShowIcon(),
+                                adapt(((StatusEffectInstanceAccessor) potionEffect).getHiddenEffect())
+                        );
+        }
+
+        private static StatusEffectInstance adapt(Effect effect) {
+            if (effect == null)
+                return null;
+            final StatusEffect type = matchEffectType(effect.type());
+            if (type == null)
+                return null;
+            return new StatusEffectInstance(
+                                RegistryEntry.of(type),
+                                effect.duration(),
+                                effect.amplifier(),
+                                effect.isAmbient(),
+                                effect.showParticles(),
+                                effect.hasIcon(),
+                                adapt(effect.hiddenEffect())
+                        );
         }
 
     }
@@ -372,7 +387,7 @@ public abstract class FabricData implements Data {
 
         // Performs a consuming function for every advancement entry registered on the server
         private static void forEachAdvancementEntry(@NotNull MinecraftServer server,
-                                               @NotNull ThrowingConsumer<net.minecraft.advancement.AdvancementEntry> con) {
+                                                    @NotNull ThrowingConsumer<net.minecraft.advancement.AdvancementEntry> con) {
             server.getAdvancementLoader().getAdvancements().forEach(con);
         }
 
@@ -429,15 +444,15 @@ public abstract class FabricData implements Data {
             try {
                 player.dismountVehicle();
                 player.teleportTo(
-                    new TeleportTarget(
-                        server.getWorld(server.getWorldRegistryKeys().stream()
-                            .filter(key -> key.getValue().equals(Identifier.tryParse(world.name())))
-                            .findFirst().orElseThrow(
-                                    () -> new IllegalStateException("Invalid world")
-                            )),
-                        player,
-                        TeleportTarget.NO_OP
-                    )
+                        new TeleportTarget(
+                                server.getWorld(server.getWorldRegistryKeys().stream()
+                                        .filter(key -> key.getValue().equals(Identifier.tryParse(world.name())))
+                                        .findFirst().orElseThrow(
+                                                () -> new IllegalStateException("Invalid world")
+                                        )),
+                                player,
+                                TeleportTarget.NO_OP
+                        )
                 );
             } catch (Throwable e) {
                 throw new IllegalStateException("Failed to apply location", e);
