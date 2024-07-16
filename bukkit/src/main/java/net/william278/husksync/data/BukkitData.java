@@ -289,7 +289,8 @@ public abstract class BukkitData implements Data {
                             potionEffect.getDuration(),
                             potionEffect.isAmbient(),
                             potionEffect.hasParticles(),
-                            potionEffect.hasIcon()
+                            potionEffect.hasIcon(),
+                            null
                     ))
                     .toList();
         }
