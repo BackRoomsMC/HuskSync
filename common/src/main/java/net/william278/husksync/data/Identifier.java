@@ -264,7 +264,9 @@ public class Identifier {
                 }
                 return 1;
             }
-            return -1;
+            if (i2.dependsOn(i1))
+                return -1;
+            return i1.getKey().compareTo(i2.getKey());
         }
 
     }
